@@ -4,6 +4,7 @@
   <meta charset="UTF-8">
   <title>VirusTotal URL Scanner</title>
   <style>
+    /* Basic styling */
     body {
       font-family: Arial, sans-serif;
       padding: 20px;
@@ -22,12 +23,14 @@
   </style>
 </head>
 <body>
+  <!-- Input and button -->
   <h2>Check URL with VirusTotal</h2>
   <input type="text" id="urlInput" placeholder="Enter a URL (e.g., https://example.com)">
   <button onclick="scanUrl()">Scan URL</button>
   <div id="result"></div>
 
   <script>
+    // Handles URL submission and scan
     async function scanUrl() {
       const url = document.getElementById("urlInput").value.trim();
       const resultDiv = document.getElementById("result");
@@ -40,6 +43,7 @@
       resultDiv.textContent = "Scanning URL...";
 
       try {
+        // Sends URL to backend proxy
         const response = await fetch("https://virustotal-proxy-cvhz.onrender.com/scan", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -48,22 +52,31 @@
 
         const data = await response.json();
 
-        if (data && data.data && data.data.attributes) {
-          const stats = data.data.attributes.stats;
+        // Parses and summarizes results
+        if (data && data.data?.attributes?.results) {
+          const results = data.data.attributes.results;
+          let malicious = 0;
+          let suspicious = 0;
+
+          for (const engine in results) {
+            const category = results[engine].category;
+            if (category === "malicious") malicious++;
+            if (category === "suspicious") suspicious++;
+          }
+
+          // Displays result summary
           resultDiv.innerHTML = `
             ✅ Scan complete for: ${url}<br><br>
-            - Malicious: ${stats.malicious}<br>
-            - Suspicious: ${stats.suspicious}<br>
-            - Harmless: ${stats.harmless}<br>
-            - Undetected: ${stats.undetected}<br><br>
+            - Malicious: ${malicious}<br>
+            - Suspicious: ${suspicious}<br><br>
             🔗 <a href="https://www.virustotal.com/gui/url/${data.meta.url_info?.id ?? 'UNKNOWN'}" target="_blank">View full report</a>
           `;
         } else {
-          resultDiv.textContent = "⚠️ Scan succeeded, but result format was unexpected.";
+          resultDiv.textContent = "⚠️ Scan completed, but no detailed results returned.";
         }
       } catch (err) {
         console.error(err);
-        resultDiv.textContent = "❌ An error occurred while scanning.";
+        resultDiv.textContent = "❌ Error during scan.";
       }
     }
   </script>
