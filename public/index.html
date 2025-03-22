@@ -98,7 +98,31 @@
 </style>
 </head>
 <body>
-  
+  <header>
+    <h1>GoPhish Email and URL Threat Detection</h1>
+    <p>Analyze URLs and Email Content for Potential Threats</p>
+  </header>
+
+  <nav>
+    <button class="tab active" onclick="switchTab('urlTab', this)">URL Scan</button>
+    <button class="tab" onclick="switchTab('emailTab', this)">Email Text Scan</button>
+  </nav>
+
+  <div class="container">
+    <div id="urlTab" class="tab-content active">
+      <h2>URL Scan</h2>
+      <input type="text" id="urlInput" placeholder="Enter one or more URLs separated by a semicolon (;)" />
+      <button class="action" onclick="scanUrls()">Scan URLs</button>
+      <div id="urlResult"></div>
+    </div>
+
+    <div id="emailTab" class="tab-content">
+      <h2>Email Text Scan</h2>
+      <textarea id="emailInput" rows="8" placeholder="Paste email text here..."></textarea>
+      <button class="action" onclick="scanEmailText()">Scan URLs in Email</button>
+      <div id="emailResult"></div>
+    </div>
+  </div>
 
   <script>
     function switchTab(tabId, btn) {
@@ -106,6 +130,48 @@
       document.querySelectorAll('button.tab').forEach(b => b.classList.remove('active'));
       document.getElementById(tabId).classList.add('active');
       btn.classList.add('active');
+    }
+
+    async function scanWithProxy(url) {
+      const res = await fetch('/api/virustotal', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url })
+      });
+      return await res.json();
+    }
+
+    async function scanWithAbuseIPDB(domain) {
+      const res = await fetch('/api/abuseipdb', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ip: domain })
+      });
+      return await res.json();
+    }
+
+    function buildVirusTotalSection(url, data) {
+      const results = data.data.attributes.results;
+      let malicious = 0, suspicious = 0, vendors = [];
+      for (const engine in results) {
+        const category = results[engine].category;
+        if (category === 'malicious') malicious++;
+        if (category === 'suspicious') suspicious++;
+        vendors.push({ engine, category });
+      }
+      const className = malicious > 0 ? 'malicious' : suspicious > 0 ? 'suspicious' : 'clean';
+      const vendorInfo = vendors.map(v => `<span class="vendor-${v.category}">- ${v.engine}: ${v.category}</span>`).join('<br>');
+      const reportId = data.meta.url_info?.id ?? 'UNKNOWN';
+      return `
+        <div class="result-block ${className}">
+          <strong>VirusTotal Result for ${url}</strong><br>
+          Malicious: ${malicious} | Suspicious: ${suspicious}<br>
+          <details><summary>Advanced Scan Information</summary>
+            ${vendorInfo}
+          </details>
+          <a href="https://www.virustotal.com/gui/url/${reportId}" target="_blank">View full report</a>
+        </div>
+      `;
     }
 
     function buildAbuseIPDBSection(ip, data) {
@@ -124,33 +190,21 @@
       `;
     }
 
-    async function fetchAbuseIPInfo(domain) {
-      const res = await fetch('/api/abuseipdb', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ip: domain })
-      });
-      return await res.json();
-    }
-
     async function scanUrls() {
       const input = document.getElementById("urlInput").value;
-      const urls = input.split(';').map(url => url.trim()).filter(Boolean);
+      const urls = input.split(';').map(u => u.trim()).filter(Boolean);
       const resultDiv = document.getElementById("urlResult");
       resultDiv.innerHTML = "<div class='loading'>Scanning...</div>";
-
       let output = "";
       for (const url of urls) {
         try {
           const domain = new URL(url).hostname;
-          const ipJson = await fetchAbuseIPInfo(domain);
-          if (ipJson && ipJson.data) {
-            output += buildAbuseIPDBSection(domain, ipJson.data);
-          } else {
-            output += `<div class="result-block">No AbuseIPDB data for ${url}</div>`;
-          }
+          const vtData = await scanWithProxy(url);
+          const ipData = await scanWithAbuseIPDB(domain);
+          output += buildVirusTotalSection(url, vtData);
+          output += buildAbuseIPDBSection(domain, ipData.data);
         } catch (err) {
-          output += `<div class="malicious">Error scanning ${url}: ${err.message}</div><br>`;
+          output += `<div class="malicious">Error scanning ${url}: ${err.message}</div>`;
         }
       }
       resultDiv.innerHTML = output;
@@ -161,33 +215,19 @@
       const urls = input.match(/https?:\/\/[\w.-]+(?:\.[\w.-]+)+(?:[\/\w?=&#%.-]*)/g) || [];
       const resultDiv = document.getElementById("emailResult");
       resultDiv.innerHTML = urls.length ? "<div class='loading'>Scanning...</div>" : "No URLs found.";
-
       let output = "";
       for (const url of urls) {
         try {
           const domain = new URL(url).hostname;
-          const ipJson = await fetchAbuseIPInfo(domain);
-          if (ipJson && ipJson.data) {
-            output += buildAbuseIPDBSection(domain, ipJson.data);
-          } else {
-            output += `<div class="result-block">No AbuseIPDB data for ${url}</div>`;
-          }
+          const vtData = await scanWithProxy(url);
+          const ipData = await scanWithAbuseIPDB(domain);
+          output += buildVirusTotalSection(url, vtData);
+          output += buildAbuseIPDBSection(domain, ipData.data);
         } catch (err) {
-          output += `<div class="malicious">Error scanning ${url}: ${err.message}</div><br>`;
+          output += `<div class="malicious">Error scanning ${url}: ${err.message}</div>`;
         }
       }
       resultDiv.innerHTML = output;
-    }
-
-    function exportResults(divId) {
-      const content = document.getElementById(divId).innerHTML;
-      const blob = new Blob([content], { type: "text/html" });
-      const link = document.createElement("a");
-      link.href = URL.createObjectURL(blob);
-      link.download = `${divId}_results.html`;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
     }
   </script>
 </body>
