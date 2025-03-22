@@ -7,20 +7,14 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 
 const VT_API_KEY = '37245157627c004794c63aa38d7636914bad23b6a52ad21b2770b10ba0d06d4f';
+const ABUSE_IP_KEY = '54014bb2293bc998ac3792bfc12c7a6c59caa50f0e81e5bbe697b56399d0036a50237789a7882672';
 
 app.use(cors());
 app.use(express.json());
-
-// MUST COME BEFORE /scan
 app.use(express.static(path.join(__dirname, 'public')));
 
-// VirusTotal scan route
-app.post('/scan', async (req, res) => {
+app.post('/api/virustotal', async (req, res) => {
   const { url } = req.body;
-
-  if (!url) {
-    return res.status(400).json({ error: 'Missing URL in request body' });
-  }
 
   try {
     const scanResponse = await axios.post(
@@ -44,19 +38,37 @@ app.post('/scan', async (req, res) => {
             headers: { 'x-apikey': VT_API_KEY },
           }
         );
-
         res.json(reportResponse.data);
       } catch (error) {
-        console.error('Error retrieving scan report:', error.message);
         res.status(500).json({ error: 'Failed to retrieve scan report' });
       }
     }, 3000);
   } catch (error) {
-    console.error('Error submitting scan:', error.message);
     res.status(500).json({ error: 'Failed to submit scan' });
   }
 });
 
+app.post('/api/abuseipdb', async (req, res) => {
+  const { ip } = req.body;
+
+  try {
+    const response = await axios.get('https://api.abuseipdb.com/api/v2/check', {
+      params: {
+        ipAddress: ip,
+        maxAgeInDays: 90
+      },
+      headers: {
+        Key: ABUSE_IP_KEY,
+        Accept: 'application/json'
+      }
+    });
+
+    res.json(response.data);
+  } catch (error) {
+    res.status(500).json({ error: 'AbuseIPDB request failed' });
+  }
+});
+
 app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
+  console.log(`Server running on http://localhost:${PORT}`);
 });
