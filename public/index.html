@@ -40,7 +40,7 @@
       color: #2980b9;
     }
     .container {
-      max-width: 800px;
+      max-width: 900px;
       margin: 40px auto;
       background-color: white;
       padding: 30px;
@@ -50,15 +50,10 @@
     h2 {
       margin-bottom: 10px;
     }
-    h3 {
-      margin-top: 30px;
-      color: #555;
-    }
     input, textarea, button.action {
       padding: 12px;
       margin: 10px 0;
       width: 100%;
-      max-width: 100%;
       font-size: 16px;
       border: 1px solid #ccc;
       border-radius: 5px;
@@ -72,52 +67,24 @@
     button.action:hover {
       background-color: #2980b9;
     }
-    .tab-content {
-      display: none;
-    }
-    .active {
-      display: block;
-    }
-    .loading {
-      font-style: italic;
-      color: gray;
-    }
-    .malicious {
-      color: red;
-    }
-    .suspicious {
-      color: orange;
-    }
-    .clean {
-      color: green;
-    }
-    .vendor-malicious {
-      color: red;
-    }
-    .vendor-suspicious {
-      color: orange;
-    }
-    .vendor-harmless {
-      color: green;
-    }
+    .tab-content { display: none; }
+    .active { display: block; }
+    .loading { font-style: italic; color: gray; }
+    .malicious { color: red; }
+    .suspicious { color: orange; }
+    .clean { color: green; }
+    .vendor-malicious { color: red; }
+    .vendor-suspicious { color: orange; }
+    .vendor-harmless { color: green; }
     .result-block {
       border: 1px solid #ddd;
-      border-left: 5px solid #3498db;
-      padding: 10px;
-      margin-bottom: 15px;
-      border-radius: 4px;
-      background-color: #fafafa;
+      padding: 15px;
+      margin-bottom: 20px;
+      border-radius: 5px;
+      background: #fafafa;
     }
-    details {
-      margin-top: 10px;
-      background: #f9f9f9;
-      padding: 10px;
-      border-radius: 4px;
-    }
-    summary {
-      font-weight: bold;
-      cursor: pointer;
-    }
+    details { margin-top: 10px; }
+    summary { font-weight: bold; cursor: pointer; }
   </style>
 </head>
 <body>
@@ -136,7 +103,6 @@
       <h2>URL Scan</h2>
       <input type="text" id="urlInput" placeholder="Enter one or more URLs separated by a semicolon (;)" />
       <button class="action" onclick="scanUrls()">Scan URLs</button>
-      <button class="action" onclick="exportResults('urlResult')">Export Results</button>
       <div id="urlResult"></div>
     </div>
 
@@ -144,7 +110,6 @@
       <h2>Email Text Scan</h2>
       <textarea id="emailInput" rows="8" placeholder="Paste email text here..."></textarea>
       <button class="action" onclick="scanEmailText()">Scan URLs in Email</button>
-      <button class="action" onclick="exportResults('emailResult')">Export Results</button>
       <div id="emailResult"></div>
     </div>
   </div>
@@ -157,61 +122,81 @@
       btn.classList.add('active');
     }
 
-    function formatResults(url, malicious, suspicious, vendors, reportId) {
-      let vendorInfo = vendors.map(v => {
-        let cls = v.category === 'malicious' ? 'vendor-malicious' : v.category === 'suspicious' ? 'vendor-suspicious' : 'vendor-harmless';
-        return `<span class="${cls}">- ${v.engine}: ${v.category}</span>`;
-      }).join('<br>');
+    async function scanWithProxy(url) {
+      const res = await fetch('/api/virustotal', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url })
+      });
+      return await res.json();
+    }
 
+    async function scanWithAbuseIPDB(domain) {
+      const res = await fetch('/api/abuseipdb', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ip: domain })
+      });
+      return await res.json();
+    }
+
+    function buildVirusTotalSection(url, data) {
+      const results = data.data.attributes.results;
+      let malicious = 0, suspicious = 0, vendors = [];
+      for (const engine in results) {
+        const category = results[engine].category;
+        if (category === 'malicious') malicious++;
+        if (category === 'suspicious') suspicious++;
+        vendors.push({ engine, category });
+      }
       const className = malicious > 0 ? 'malicious' : suspicious > 0 ? 'suspicious' : 'clean';
+      const vendorInfo = vendors.map(v => `<span class="vendor-${v.category}">- ${v.engine}: ${v.category}</span>`).join('<br>');
+      const reportId = data.meta.url_info?.id ?? 'UNKNOWN';
       return `
-<div class="result-block ${className}">
-<strong>${url}</strong><br>
-Malicious: ${malicious} | Suspicious: ${suspicious}<br>
-<details>
-  <summary>Advanced Scan Information</summary>
-  ${vendorInfo}<br>
-</details>
-<a href="https://www.virustotal.com/gui/url/${reportId}" target="_blank">View full report</a>
-</div>`;
+        <div class="result-block ${className}">
+          <strong>VirusTotal Result for ${url}</strong><br>
+          Malicious: ${malicious} | Suspicious: ${suspicious}<br>
+          <details><summary>Advanced Scan Information</summary>
+            ${vendorInfo}
+          </details>
+          <a href="https://www.virustotal.com/gui/url/${reportId}" target="_blank">View full report</a>
+        </div>
+      `;
+    }
+
+    function buildAbuseIPDBSection(ip, data) {
+      const abuseScore = data.abuseConfidenceScore || 0;
+      const className = abuseScore >= 50 ? 'malicious' : abuseScore > 0 ? 'suspicious' : 'clean';
+      return `
+        <div class="result-block ${className}">
+          <strong>AbuseIPDB Result for ${ip}</strong><br>
+          Abuse Score: ${abuseScore}%<br>
+          Country: ${data.countryCode}<br>
+          ISP: ${data.isp}<br>
+          <details><summary>Advanced Scan Information</summary>
+            <pre>${JSON.stringify(data, null, 2)}</pre>
+          </details>
+        </div>
+      `;
     }
 
     async function scanUrls() {
       const input = document.getElementById("urlInput").value;
-      const urls = input.split(';').map(url => url.trim()).filter(Boolean);
+      const urls = input.split(';').map(u => u.trim()).filter(Boolean);
       const resultDiv = document.getElementById("urlResult");
       resultDiv.innerHTML = "<div class='loading'>Scanning...</div>";
-
       let output = "";
       for (const url of urls) {
         try {
-          const res = await fetch("https://virustotal-proxy-cvhz.onrender.com/scan", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ url })
-          });
-
-          if (!res.ok) throw new Error(await res.text());
-          const data = await res.json();
-          const results = data.data.attributes.results;
-
-          let malicious = 0;
-          let suspicious = 0;
-          let vendors = [];
-
-          for (const engine in results) {
-            const category = results[engine].category;
-            if (category === "malicious") malicious++;
-            if (category === "suspicious") suspicious++;
-            vendors.push({ engine, category });
-          }
-
-          output += formatResults(url, malicious, suspicious, vendors, data.meta.url_info?.id ?? 'UNKNOWN');
+          const domain = new URL(url).hostname;
+          const vtData = await scanWithProxy(url);
+          const ipData = await scanWithAbuseIPDB(domain);
+          output += buildVirusTotalSection(url, vtData);
+          output += buildAbuseIPDBSection(domain, ipData);
         } catch (err) {
-          output += `<div class="malicious">Error: Error scanning ${url}: ${err.message}</div><br>`;
+          output += `<div class="malicious">Error scanning ${url}: ${err.message}</div>`;
         }
       }
-
       resultDiv.innerHTML = output;
     }
 
@@ -220,49 +205,19 @@ Malicious: ${malicious} | Suspicious: ${suspicious}<br>
       const urls = input.match(/https?:\/\/[\w.-]+(?:\.[\w.-]+)+(?:[\/\w?=&#%.-]*)/g) || [];
       const resultDiv = document.getElementById("emailResult");
       resultDiv.innerHTML = urls.length ? "<div class='loading'>Scanning...</div>" : "No URLs found.";
-
       let output = "";
       for (const url of urls) {
         try {
-          const res = await fetch("https://virustotal-proxy-cvhz.onrender.com/scan", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ url })
-          });
-
-          if (!res.ok) throw new Error(await res.text());
-          const data = await res.json();
-          const results = data.data.attributes.results;
-
-          let malicious = 0;
-          let suspicious = 0;
-          let vendors = [];
-
-          for (const engine in results) {
-            const category = results[engine].category;
-            if (category === "malicious") malicious++;
-            if (category === "suspicious") suspicious++;
-            vendors.push({ engine, category });
-          }
-
-          output += formatResults(url, malicious, suspicious, vendors, data.meta.url_info?.id ?? 'UNKNOWN');
+          const domain = new URL(url).hostname;
+          const vtData = await scanWithProxy(url);
+          const ipData = await scanWithAbuseIPDB(domain);
+          output += buildVirusTotalSection(url, vtData);
+          output += buildAbuseIPDBSection(domain, ipData);
         } catch (err) {
-          output += `<div class="malicious">Error: Error scanning ${url}: ${err.message}</div><br>`;
+          output += `<div class="malicious">Error scanning ${url}: ${err.message}</div>`;
         }
       }
-
       resultDiv.innerHTML = output;
-    }
-
-    function exportResults(divId) {
-      const content = document.getElementById(divId).innerHTML;
-      const blob = new Blob([content], { type: "text/html" });
-      const link = document.createElement("a");
-      link.href = URL.createObjectURL(blob);
-      link.download = `${divId}_results.html`;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
     }
   </script>
 </body>
