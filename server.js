@@ -11,7 +11,7 @@ const VT_API_KEY = '37245157627c004794c63aa38d7636914bad23b6a52ad21b2770b10ba0d0
 app.use(cors());
 app.use(express.json());
 
-// ✅ THIS MUST COME BEFORE /scan
+// MUST COME BEFORE /scan
 app.use(express.static(path.join(__dirname, 'public')));
 
 // VirusTotal scan route
@@ -58,5 +58,5 @@ app.post('/scan', async (req, res) => {
 });
 
 app.listen(PORT, () => {
-  console.log(`🚀 Server running on port ${PORT}`);
+  console.log(`Server running on port ${PORT}`);
 });
