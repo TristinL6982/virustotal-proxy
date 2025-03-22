@@ -23,14 +23,14 @@
   </style>
 </head>
 <body>
-  <!-- Input and button -->
+  <!-- Input and scan button -->
   <h2>Check URL with VirusTotal</h2>
   <input type="text" id="urlInput" placeholder="Enter a URL (e.g., https://example.com)">
   <button onclick="scanUrl()">Scan URL</button>
   <div id="result"></div>
 
   <script>
-    // Handles URL submission and scan
+    // Submits URL and displays VirusTotal results
     async function scanUrl() {
       const url = document.getElementById("urlInput").value.trim();
       const resultDiv = document.getElementById("result");
@@ -43,16 +43,20 @@
       resultDiv.textContent = "Scanning URL...";
 
       try {
-        // Sends URL to backend proxy
         const response = await fetch("https://virustotal-proxy-cvhz.onrender.com/scan", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ url })
         });
 
+        // Prevent JSON parse error if response isn't valid JSON
+        if (!response.ok) {
+          const errorText = await response.text();
+          throw new Error(`Server returned ${response.status}: ${errorText}`);
+        }
+
         const data = await response.json();
 
-        // Parses and summarizes results
         if (data && data.data?.attributes?.results) {
           const results = data.data.attributes.results;
           let malicious = 0;
@@ -64,7 +68,6 @@
             if (category === "suspicious") suspicious++;
           }
 
-          // Displays result summary
           resultDiv.innerHTML = `
             ✅ Scan complete for: ${url}<br><br>
             - Malicious: ${malicious}<br>
@@ -72,11 +75,11 @@
             🔗 <a href="https://www.virustotal.com/gui/url/${data.meta.url_info?.id ?? 'UNKNOWN'}" target="_blank">View full report</a>
           `;
         } else {
-          resultDiv.textContent = "⚠️ Scan completed, but no detailed results returned.";
+          resultDiv.textContent = "⚠️ Scan succeeded, but results are missing or incomplete.";
         }
       } catch (err) {
         console.error(err);
-        resultDiv.textContent = "❌ Error during scan.";
+        resultDiv.textContent = `❌ Error: ${err.message}`;
       }
     }
   </script>
