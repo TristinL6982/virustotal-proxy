@@ -222,7 +222,7 @@
           const vtData = await scanWithProxy(url);
           const ipData = await scanWithAbuseIPDB(domain);
           output += buildVirusTotalSection(url, vtData);
-          output += buildAbuseIPDBSection(domain, ipData.data);
+          output += buildAbuseIPDBSection(domain, ipData);
         } catch (err) {
           output += `<div class="malicious">Error scanning ${url}: ${err.message}</div>`;
         }
