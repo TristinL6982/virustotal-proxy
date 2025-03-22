@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>VirusTotal URL Scanner</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      padding: 20px;
+    }
+    input, button {
+      padding: 10px;
+      margin: 10px 0;
+      width: 100%;
+      max-width: 400px;
+      font-size: 16px;
+    }
+    #result {
+      margin-top: 20px;
+      white-space: pre-wrap;
+    }
+  </style>
+</head>
+<body>
+  <h2>Check URL with VirusTotal</h2>
+  <input type="text" id="urlInput" placeholder="Enter a URL (e.g., https://example.com)">
+  <button onclick="scanUrl()">Scan URL</button>
+  <div id="result"></div>
+
+  <script>
+    async function scanUrl() {
+      const url = document.getElementById("urlInput").value.trim();
+      const resultDiv = document.getElementById("result");
+
+      if (!url) {
+        resultDiv.textContent = "❌ Please enter a valid URL.";
+        return;
+      }
+
+      resultDiv.textContent = "Scanning URL...";
+
+      try {
+        const response = await fetch("https://virustotal-proxy-cvhz.onrender.com/scan", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ url })
+        });
+
+        const data = await response.json();
+
+        if (data && data.data && data.data.attributes) {
+          const stats = data.data.attributes.stats;
+          resultDiv.innerHTML = `
+            ✅ Scan complete for: ${url}<br><br>
+            - Malicious: ${stats.malicious}<br>
+            - Suspicious: ${stats.suspicious}<br>
+            - Harmless: ${stats.harmless}<br>
+            - Undetected: ${stats.undetected}<br><br>
+            🔗 <a href="https://www.virustotal.com/gui/url/${data.meta.url_info?.id ?? 'UNKNOWN'}" target="_blank">View full report</a>
+          `;
+        } else {
+          resultDiv.textContent = "⚠️ Scan succeeded, but result format was unexpected.";
+        }
+      } catch (err) {
+        console.error(err);
+        resultDiv.textContent = "❌ An error occurred while scanning.";
+      }
+    }
+  </script>
+</body>
+</html>
