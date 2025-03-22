@@ -3,12 +3,13 @@ const axios = require('axios');
 const cors = require('cors');
 const path = require('path');
 const dns = require('dns').promises;
+require('dotenv').config();
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-const VT_API_KEY = '37245157627c004794c63aa38d7636914bad23b6a52ad21b2770b10ba0d06d4f';
-const ABUSE_IP_KEY = '54014bb2293bc998ac3792bfc12c7a6c59caa50f0e81e5bbe697b56399d0036a50237789a7882672';
+const VT_API_KEY = process.env.VT_API_KEY;
+const ABUSE_IP_KEY = process.env.ABUSE_IP_KEY;
 
 app.use(cors());
 app.use(express.json());
@@ -53,16 +54,10 @@ app.post('/api/abuseipdb', async (req, res) => {
   const { ip } = req.body;
 
   try {
-    const addresses = await dns.lookup(ip, { all: true });
-    const ipAddress = addresses[0]?.address;
-
-    if (!ipAddress) {
-      return res.status(400).json({ error: 'Failed to resolve IP from domain' });
-    }
-
+    const resolved = await dns.lookup(ip);
     const response = await axios.get('https://api.abuseipdb.com/api/v2/check', {
       params: {
-        ipAddress,
+        ipAddress: resolved.address,
         maxAgeInDays: 90
       },
       headers: {
