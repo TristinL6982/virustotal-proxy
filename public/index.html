@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>GoPhish Virus/Threat Detection Project</title>
+  <title>VirusTotal Scanner</title>
   <style>
     body {
       font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
@@ -91,6 +91,15 @@
     .clean {
       color: green;
     }
+    .vendor-malicious {
+      color: red;
+    }
+    .vendor-suspicious {
+      color: orange;
+    }
+    .vendor-harmless {
+      color: green;
+    }
     .result-block {
       border: 1px solid #ddd;
       border-left: 5px solid #3498db;
@@ -99,11 +108,21 @@
       border-radius: 4px;
       background-color: #fafafa;
     }
+    details {
+      margin-top: 10px;
+      background: #f9f9f9;
+      padding: 10px;
+      border-radius: 4px;
+    }
+    summary {
+      font-weight: bold;
+      cursor: pointer;
+    }
   </style>
 </head>
 <body>
   <header>
-    <h1>GoPhish Virus and Threat Detection</h1>
+    <h1>VirusTotal Scanner</h1>
     <p>Analyze URLs and Email Content for Potential Threats</p>
   </header>
 
@@ -139,13 +158,20 @@
     }
 
     function formatResults(url, malicious, suspicious, vendors, reportId) {
-      let vendorInfo = vendors.map(v => `- ${v.engine}: ${v.category}`).join('<br>');
+      let vendorInfo = vendors.map(v => {
+        let cls = v.category === 'malicious' ? 'vendor-malicious' : v.category === 'suspicious' ? 'vendor-suspicious' : 'vendor-harmless';
+        return `<span class="${cls}">- ${v.engine}: ${v.category}</span>`;
+      }).join('<br>');
+
       const className = malicious > 0 ? 'malicious' : suspicious > 0 ? 'suspicious' : 'clean';
       return `
 <div class="result-block ${className}">
 <strong>${url}</strong><br>
 Malicious: ${malicious} | Suspicious: ${suspicious}<br>
-<b>Vendor Detections:</b><br>${vendorInfo}<br>
+<details>
+  <summary>Advanced Scan Information</summary>
+  ${vendorInfo}<br>
+</details>
 <a href="https://www.virustotal.com/gui/url/${reportId}" target="_blank">View full report</a>
 </div>`;
     }
@@ -182,7 +208,7 @@ Malicious: ${malicious} | Suspicious: ${suspicious}<br>
 
           output += formatResults(url, malicious, suspicious, vendors, data.meta.url_info?.id ?? 'UNKNOWN');
         } catch (err) {
-          output += `<div class="malicious"> Error scanning ${url}: ${err.message}</div><br>`;
+          output += `<div class="malicious">Error: Error scanning ${url}: ${err.message}</div><br>`;
         }
       }
 
@@ -221,7 +247,7 @@ Malicious: ${malicious} | Suspicious: ${suspicious}<br>
 
           output += formatResults(url, malicious, suspicious, vendors, data.meta.url_info?.id ?? 'UNKNOWN');
         } catch (err) {
-          output += `<div class="malicious"> Error scanning ${url}: ${err.message}</div><br>`;
+          output += `<div class="malicious">Error: Error scanning ${url}: ${err.message}</div><br>`;
         }
       }
 
