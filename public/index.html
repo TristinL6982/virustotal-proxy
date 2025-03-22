@@ -1,234 +1,139 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <title>GoPhish-Email-and-URL-Threat-Detection</title>
-  <style>
-  body {
-    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-    margin: 0;
-    background-color: #f4f6f8;
-    color: #333;
+<script>
+  function switchTab(tabId, btn) {
+    document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+    document.querySelectorAll('button.tab').forEach(b => b.classList.remove('active'));
+    document.getElementById(tabId).classList.add('active');
+    btn.classList.add('active');
   }
-  header {
-    background-color: #2c3e50;
-    color: white;
-    padding: 20px;
-    text-align: center;
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-  }
-  nav {
-    display: flex;
-    justify-content: center;
-    background-color: #ecf0f1;
-    padding: 10px 0;
-    border-bottom: 1px solid #ccc;
-  }
-  button.tab {
-    background-color: transparent;
-    border: none;
-    font-size: 16px;
-    font-weight: bold;
-    margin: 0 15px;
-    padding: 10px 20px;
-    cursor: pointer;
-    color: #2c3e50;
-    border-bottom: 2px solid transparent;
-  }
-  button.tab:hover, button.tab.active {
-    border-bottom: 2px solid #2980b9;
-    color: #2980b9;
-  }
-  .container {
-    max-width: 900px;
-    margin: 40px auto;
-    background-color: white;
-    padding: 30px;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-    border-radius: 8px;
-  }
-  h2, h3 {
-    margin-bottom: 10px;
-  }
-  input, textarea, button.action {
-    padding: 12px;
-    margin: 10px 0;
-    width: 100%;
-    font-size: 16px;
-    border: 1px solid #ccc;
-    border-radius: 5px;
-  }
-  button.action {
-    background-color: #3498db;
-    color: white;
-    border: none;
-    cursor: pointer;
-  }
-  button.action:hover {
-    background-color: #2980b9;
-  }
-  .tab-content { display: none; }
-  .active { display: block; }
-  .loading { font-style: italic; color: gray; }
-  .malicious { color: red; }
-  .suspicious { color: orange; }
-  .clean { color: green; }
-  .vendor-malicious { color: red; }
-  .vendor-suspicious { color: orange; }
-  .vendor-harmless { color: green; }
-  .result-block {
-    border: 1px solid #ddd;
-    padding: 15px;
-    margin-bottom: 20px;
-    border-radius: 5px;
-    background: #fafafa;
-  }
-  .result-table {
-    width: 100%;
-    border-collapse: collapse;
-    margin-top: 10px;
-  }
-  .result-table th, .result-table td {
-    border: 1px solid #ccc;
-    padding: 8px;
-    text-align: left;
-  }
-  details { margin-top: 10px; }
-  summary { font-weight: bold; cursor: pointer; }
-</style>
-</head>
-<body>
-  <header>
-    <h1>GoPhish Email and URL Threat Detection</h1>
-    <p>Analyze URLs and Email Content for Potential Threats</p>
-  </header>
 
-  <nav>
-    <button class="tab active" onclick="switchTab('urlTab', this)">URL Scan</button>
-    <button class="tab" onclick="switchTab('emailTab', this)">Email Text Scan</button>
-  </nav>
+  async function scanWithProxy(url) {
+    const res = await fetch('/api/virustotal', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ url })
+    });
+    return await res.json();
+  }
 
-  <div class="container">
-    <div id="urlTab" class="tab-content active">
-      <h2>URL Scan</h2>
-      <input type="text" id="urlInput" placeholder="Enter one or more URLs separated by a semicolon (;)" />
-      <button class="action" onclick="scanUrls()">Scan URLs</button>
-      <div id="urlResult"></div>
-    </div>
+  async function scanWithAbuseIPDB(domain) {
+    const res = await fetch('/api/abuseipdb', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ip: domain })
+    });
+    return await res.json();
+  }
 
-    <div id="emailTab" class="tab-content">
-      <h2>Email Text Scan</h2>
-      <textarea id="emailInput" rows="8" placeholder="Paste email text here..."></textarea>
-      <button class="action" onclick="scanEmailText()">Scan URLs in Email</button>
-      <div id="emailResult"></div>
-    </div>
-  </div>
-
-  <script>
-    function switchTab(tabId, btn) {
-      document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
-      document.querySelectorAll('button.tab').forEach(b => b.classList.remove('active'));
-      document.getElementById(tabId).classList.add('active');
-      btn.classList.add('active');
+  function buildVirusTotalSection(url, data) {
+    const results = data.data.attributes.results;
+    let malicious = 0, suspicious = 0, vendors = [];
+    for (const engine in results) {
+      const category = results[engine].category;
+      if (category === 'malicious') malicious++;
+      if (category === 'suspicious') suspicious++;
+      vendors.push({ engine, category });
     }
+    const totalEngines = Object.keys(results).length;
+    const threats = malicious + suspicious;
+    const safety = Math.round(((totalEngines - threats) / totalEngines) * 100);
 
-    async function scanWithProxy(url) {
-      const res = await fetch('/api/virustotal', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url })
-      });
-      return await res.json();
-    }
+    const className = malicious > 0 ? 'malicious' : suspicious > 0 ? 'suspicious' : 'clean';
+    const vendorInfo = vendors.map(v => `<span class="vendor-${v.category}">- ${v.engine}: ${v.category}</span>`).join('<br>');
+    const reportId = data.meta.url_info?.id ?? 'UNKNOWN';
 
-    async function scanWithAbuseIPDB(domain) {
-      const res = await fetch('/api/abuseipdb', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ip: domain })
-      });
-      return await res.json();
-    }
-
-    function buildVirusTotalSection(url, data) {
-      const results = data.data.attributes.results;
-      let malicious = 0, suspicious = 0, vendors = [];
-      for (const engine in results) {
-        const category = results[engine].category;
-        if (category === 'malicious') malicious++;
-        if (category === 'suspicious') suspicious++;
-        vendors.push({ engine, category });
-      }
-      const className = malicious > 0 ? 'malicious' : suspicious > 0 ? 'suspicious' : 'clean';
-      const vendorInfo = vendors.map(v => `<span class="vendor-${v.category}">- ${v.engine}: ${v.category}</span>`).join('<br>');
-      const reportId = data.meta.url_info?.id ?? 'UNKNOWN';
-      return `
+    return {
+      html: `
         <div class="result-block ${className}">
           <strong>VirusTotal Result for ${url}</strong><br>
           Malicious: ${malicious} | Suspicious: ${suspicious}<br>
+          Safety Score: ${safety}%<br>
           <details><summary>Advanced Scan Information</summary>
             ${vendorInfo}
           </details>
           <a href="https://www.virustotal.com/gui/url/${reportId}" target="_blank">View full report</a>
         </div>
-      `;
-    }
+      `,
+      score: safety
+    };
+  }
 
-    function buildAbuseIPDBSection(ip, data) {
-      const abuseScore = data.abuseConfidenceScore || 0;
-      const className = abuseScore >= 50 ? 'malicious' : abuseScore > 0 ? 'suspicious' : 'clean';
-      return `
+  function buildAbuseIPDBSection(ip, data) {
+    const abuseScore = data.abuseConfidenceScore || 0;
+    const safety = 100 - abuseScore;
+    const className = abuseScore >= 50 ? 'malicious' : abuseScore > 0 ? 'suspicious' : 'clean';
+
+    return {
+      html: `
         <div class="result-block ${className}">
           <strong>AbuseIPDB Result for ${ip}</strong><br>
           Abuse Score: ${abuseScore}%<br>
+          Safety Score: ${safety}%<br>
           Country: ${data.countryCode}<br>
           ISP: ${data.isp}<br>
           <details><summary>Advanced Scan Information</summary>
             <pre>${JSON.stringify(data, null, 2)}</pre>
           </details>
         </div>
-      `;
+      `,
+      score: safety
+    };
+  }
+
+  async function scanUrls() {
+    const input = document.getElementById("urlInput").value;
+    const urls = input.split(';').map(u => u.trim()).filter(Boolean);
+    const resultDiv = document.getElementById("urlResult");
+    resultDiv.innerHTML = "<div class='loading'>Scanning...</div>";
+    let output = "";
+    let allScores = [];
+
+    for (const url of urls) {
+      try {
+        const domain = new URL(url).hostname;
+        const vtData = await scanWithProxy(url);
+        const ipData = await scanWithAbuseIPDB(domain);
+
+        const vtResult = buildVirusTotalSection(url, vtData);
+        const abResult = buildAbuseIPDBSection(domain, ipData);
+
+        allScores.push(vtResult.score, abResult.score);
+        output += vtResult.html + abResult.html;
+      } catch (err) {
+        output += `<div class="malicious">Error scanning ${url}: ${err.message}</div>`;
+      }
     }
 
-    async function scanUrls() {
-      const input = document.getElementById("urlInput").value;
-      const urls = input.split(';').map(u => u.trim()).filter(Boolean);
-      const resultDiv = document.getElementById("urlResult");
-      resultDiv.innerHTML = "<div class='loading'>Scanning...</div>";
-      let output = "";
-      for (const url of urls) {
-        try {
-          const domain = new URL(url).hostname;
-          const vtData = await scanWithProxy(url);
-          const ipData = await scanWithAbuseIPDB(domain);
-          output += buildVirusTotalSection(url, vtData);
-          output += buildAbuseIPDBSection(domain, ipData);
-        } catch (err) {
-          output += `<div class="malicious">Error scanning ${url}: ${err.message}</div>`;
-        }
+    const avgScore = allScores.length ? Math.round(allScores.reduce((a, b) => a + b) / allScores.length) : 0;
+    const summary = `<h3>Combined Safety Score: ${avgScore}%</h3><hr>`;
+    resultDiv.innerHTML = summary + output;
+  }
+
+  async function scanEmailText() {
+    const input = document.getElementById("emailInput").value;
+    const urls = input.match(/https?:\/\/[\w.-]+(?:\.[\w.-]+)+(?:[\/\w?=&#%.-]*)/g) || [];
+    const resultDiv = document.getElementById("emailResult");
+    resultDiv.innerHTML = urls.length ? "<div class='loading'>Scanning...</div>" : "No URLs found.";
+    let output = "";
+    let allScores = [];
+
+    for (const url of urls) {
+      try {
+        const domain = new URL(url).hostname;
+        const vtData = await scanWithProxy(url);
+        const ipData = await scanWithAbuseIPDB(domain);
+
+        const vtResult = buildVirusTotalSection(url, vtData);
+        const abResult = buildAbuseIPDBSection(domain, ipData);
+
+        allScores.push(vtResult.score, abResult.score);
+        output += vtResult.html + abResult.html;
+      } catch (err) {
+        output += `<div class="malicious">Error scanning ${url}: ${err.message}</div>`;
       }
-      resultDiv.innerHTML = output;
     }
 
-    async function scanEmailText() {
-      const input = document.getElementById("emailInput").value;
-      const urls = input.match(/https?:\/\/[\w.-]+(?:\.[\w.-]+)+(?:[\/\w?=&#%.-]*)/g) || [];
-      const resultDiv = document.getElementById("emailResult");
-      resultDiv.innerHTML = urls.length ? "<div class='loading'>Scanning...</div>" : "No URLs found.";
-      let output = "";
-      for (const url of urls) {
-        try {
-          const domain = new URL(url).hostname;
-          const vtData = await scanWithProxy(url);
-          const ipData = await scanWithAbuseIPDB(domain);
-          output += buildVirusTotalSection(url, vtData);
-          output += buildAbuseIPDBSection(domain, ipData);
-        } catch (err) {
-          output += `<div class="malicious">Error scanning ${url}: ${err.message}</div>`;
-        }
-      }
-      resultDiv.innerHTML = output;
-    }
-  </script>
-</body>
-</html>
+    const avgScore = allScores.length ? Math.round(allScores.reduce((a, b) => a + b) / allScores.length) : 0;
+    const summary = `<h3>Combined Safety Score: ${avgScore}%</h3><hr>`;
+    resultDiv.innerHTML = summary + output;
+  }
+</script>
