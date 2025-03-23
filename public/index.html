@@ -139,28 +139,35 @@
     }
 
     function buildVirusTotalSection(url, data) {
-      const results = data.data.attributes.results;
-      let malicious = 0, suspicious = 0, vendors = [];
-      for (const engine in results) {
-        const category = results[engine].category;
-        if (category === 'malicious') malicious++;
-        if (category === 'suspicious') suspicious++;
-        vendors.push({ engine, category });
-      }
-      const className = malicious > 0 ? 'malicious' : suspicious > 0 ? 'suspicious' : 'clean';
-      const vendorInfo = vendors.map(v => `<span class="vendor-${v.category}">- ${v.engine}: ${v.category}</span>`).join('<br>');
-      const reportId = data.meta.url_info?.id ?? 'UNKNOWN';
-      return `
-        <div class="result-block ${className}">
-          <strong>VirusTotal Result for ${url}</strong><br>
-          Malicious: ${malicious} | Suspicious: ${suspicious}<br>
-          <details><summary>Advanced Scan Information</summary>
-            ${vendorInfo}
-          </details>
-          <a href="https://www.virustotal.com/gui/url/${reportId}" target="_blank">View full report</a>
-        </div>
-      `;
-    }
+  const results = data.final.data.attributes.last_analysis_results;
+  let malicious = 0, suspicious = 0, vendors = [];
+
+  for (const engine in results) {
+    const category = results[engine].category;
+    if (category === 'malicious') malicious++;
+    if (category === 'suspicious') suspicious++;
+    vendors.push({ engine, category });
+  }
+
+  const className = malicious > 0 ? 'malicious' : suspicious > 0 ? 'suspicious' : 'clean';
+  const vendorInfo = vendors.map(v =>
+    `<span class="vendor-${v.category}">- ${v.engine}: ${v.category}</span>`
+  ).join('<br>');
+
+  const reportId = data.final.data.id ?? 'UNKNOWN';
+
+  return `
+    <div class="result-block ${className}">
+      <strong>VirusTotal Result for ${url}</strong><br>
+      Malicious: ${malicious} | Suspicious: ${suspicious}<br>
+      <details><summary>Advanced Scan Information</summary>
+        ${vendorInfo}
+      </details>
+      <a href="https://www.virustotal.com/gui/url/${reportId}" target="_blank">View full report</a>
+    </div>
+  `;
+}
+
 
     function buildAbuseIPDBSection(ip, data) {
       const abuseScore = data.abuseConfidenceScore || 0;
