@@ -42,10 +42,22 @@ app.post('/api/virustotal', async (req, res) => {
             headers: { 'x-apikey': VT_API_KEY },
           }
         );
-        console.log('[VirusTotal] Scan report retrieved.');
-        res.json(reportResponse.data);
+        const result = reportResponse.data;
+        console.log('[VirusTotal] Raw scan report retrieved.');
+
+        // Fetch final detailed results using the resolved URL ID
+        const urlId = scanResponse.data.data.id;
+        const finalReport = await axios.get(
+          `https://www.virustotal.com/api/v3/urls/${urlId}`,
+          {
+            headers: { 'x-apikey': VT_API_KEY },
+          }
+        );
+
+        result.final = finalReport.data;
+        res.json(result);
       } catch (error) {
-        console.error('[VirusTotal] Error retrieving scan report:', error.message);
+        console.error('[VirusTotal] Error retrieving final report:', error.message);
         res.status(500).json({ error: 'Failed to retrieve scan report' });
       }
     }, 3000);
