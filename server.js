@@ -36,28 +36,25 @@ app.post('/api/virustotal', async (req, res) => {
 
     setTimeout(async () => {
       try {
-        const reportResponse = await axios.get(
+        const analysis = await axios.get(
           `https://www.virustotal.com/api/v3/analyses/${scanId}`,
           {
             headers: { 'x-apikey': VT_API_KEY },
           }
         );
-        const result = reportResponse.data;
-        console.log('[VirusTotal] Raw scan report retrieved.');
+        console.log('[VirusTotal] Analysis completed. Fetching final report...');
 
-        // Fetch final detailed results using the resolved URL ID
-        const urlId = scanResponse.data.data.id;
+        const encodedUrl = Buffer.from(url).toString('base64').replace(/=+$/, '');
         const finalReport = await axios.get(
-          `https://www.virustotal.com/api/v3/urls/${urlId}`,
+          `https://www.virustotal.com/api/v3/urls/${encodedUrl}`,
           {
             headers: { 'x-apikey': VT_API_KEY },
           }
         );
 
-        result.final = finalReport.data;
-        res.json(result);
+        res.json({ analysis: analysis.data, final: finalReport.data });
       } catch (error) {
-        console.error('[VirusTotal] Error retrieving final report:', error.message);
+        console.error('[VirusTotal] Error retrieving scan report:', error.message);
         res.status(500).json({ error: 'Failed to retrieve scan report' });
       }
     }, 3000);
