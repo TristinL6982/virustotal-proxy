@@ -47,7 +47,9 @@
       box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
       border-radius: 8px;
     }
-    h2, h3 { margin-bottom: 10px; }
+    h2, h3 {
+      margin-bottom: 10px;
+    }
     input, textarea, button.action {
       padding: 12px;
       margin: 10px 0;
@@ -81,18 +83,6 @@
       border-radius: 5px;
       background: #fafafa;
     }
-    .result-table {
-      width: 100%;
-      border-collapse: collapse;
-      margin-top: 10px;
-    }
-    .result-table th, .result-table td {
-      border: 1px solid #ccc;
-      padding: 8px;
-      text-align: left;
-    }
-    details { margin-top: 10px; }
-    summary { font-weight: bold; cursor: pointer; }
   </style>
 </head>
 <body>
@@ -149,87 +139,90 @@
     }
 
     function buildVirusTotalSection(url, data) {
-      const results = data.data.attributes.results;
-      let malicious = 0, suspicious = 0, vendors = [];
-      for (const engine in results) {
-        const category = results[engine].category;
-        if (category === 'malicious') malicious++;
-        if (category === 'suspicious') suspicious++;
-        vendors.push({ engine, category });
-      }
-      const total = Object.keys(results).length;
-      const threats = malicious + suspicious;
-      const score = Math.round(((total - threats) / total) * 100);
-      const className = malicious > 0 ? 'malicious' : suspicious > 0 ? 'suspicious' : 'clean';
-      const vendorInfo = vendors.map(v => `<span class="vendor-${v.category}">- ${v.engine}: ${v.category}</span>`).join('<br>');
-      const reportId = data.meta.url_info?.id ?? 'UNKNOWN';
+  const results = data.final.data.attributes.last_analysis_results;
+  let malicious = 0, suspicious = 0, vendors = [];
 
-      return {
-        html: `
-          <div class="result-block ${className}">
-            <strong>VirusTotal Result for ${url}</strong><br>
-            Malicious: ${malicious} | Suspicious: ${suspicious}<br>
-            Safety Score: ${score}%<br>
-            <details><summary>Advanced Scan Information</summary>
-              ${vendorInfo}
-            </details>
-            <a href="https://www.virustotal.com/gui/url/${reportId}" target="_blank">View full report</a>
-          </div>`,
-        score
-      };
-    }
+  for (const engine in results) {
+    const category = results[engine].category;
+    if (category === 'malicious') malicious++;
+    if (category === 'suspicious') suspicious++;
+    vendors.push({ engine, category });
+  }
+
+  const className = malicious > 0 ? 'malicious' : suspicious > 0 ? 'suspicious' : 'clean';
+  const vendorInfo = vendors.map(v =>
+    `<span class="vendor-${v.category}">- ${v.engine}: ${v.category}</span>`
+  ).join('<br>');
+
+  const reportId = data.final.data.id ?? 'UNKNOWN';
+
+  return `
+    <div class="result-block ${className}">
+      <strong>VirusTotal Result for ${url}</strong><br>
+      Malicious: ${malicious} | Suspicious: ${suspicious}<br>
+      <details><summary>Advanced Scan Information</summary>
+        ${vendorInfo}
+      </details>
+      <a href="https://www.virustotal.com/gui/url/${reportId}" target="_blank">View full report</a>
+    </div>
+  `;
+}
+
 
     function buildAbuseIPDBSection(ip, data) {
-      const abuse = data.abuseConfidenceScore || 0;
-      const score = 100 - abuse;
-      const className = abuse >= 50 ? 'malicious' : abuse > 0 ? 'suspicious' : 'clean';
-
-      return {
-        html: `
-          <div class="result-block ${className}">
-            <strong>AbuseIPDB Result for ${ip}</strong><br>
-            Abuse Score: ${abuse}%<br>
-            Safety Score: ${score}%<br>
-            Country: ${data.countryCode}<br>
-            ISP: ${data.isp}<br>
-            <details><summary>Advanced Scan Information</summary>
-              <pre>${JSON.stringify(data, null, 2)}</pre>
-            </details>
-          </div>`,
-        score
-      };
+      const abuseScore = data.abuseConfidenceScore || 0;
+      const className = abuseScore >= 50 ? 'malicious' : abuseScore > 0 ? 'suspicious' : 'clean';
+      return `
+        <div class="result-block ${className}">
+          <strong>AbuseIPDB Result for ${ip}</strong><br>
+          Abuse Score: ${abuseScore}%<br>
+          Country: ${data.countryCode}<br>
+          ISP: ${data.isp}<br>
+          <details><summary>Advanced Scan Information</summary>
+            <pre>${JSON.stringify(data, null, 2)}</pre>
+          </details>
+        </div>
+      `;
     }
 
-    async function scanAll(urls, resultDiv) {
+    async function scanUrls() {
+      const input = document.getElementById("urlInput").value;
+      const urls = input.split(';').map(u => u.trim()).filter(Boolean);
+      const resultDiv = document.getElementById("urlResult");
       resultDiv.innerHTML = "<div class='loading'>Scanning...</div>";
-      let output = "", scores = [];
-
+      let output = "";
       for (const url of urls) {
         try {
           const domain = new URL(url).hostname;
-          const vt = buildVirusTotalSection(url, await scanWithProxy(url));
-          const ab = buildAbuseIPDBSection(domain, await scanWithAbuseIPDB(domain));
-          scores.push(vt.score, ab.score);
-          output += vt.html + ab.html;
+          const vtData = await scanWithProxy(url);
+          const ipData = await scanWithAbuseIPDB(domain);
+          output += buildVirusTotalSection(url, vtData);
+          output += buildAbuseIPDBSection(domain, ipData);
         } catch (err) {
           output += `<div class="malicious">Error scanning ${url}: ${err.message}</div>`;
         }
       }
-
-      const avg = scores.length ? Math.round(scores.reduce((a, b) => a + b) / scores.length) : 0;
-      resultDiv.innerHTML = `<h3>Combined Safety Score: ${avg}%</h3><hr>` + output;
+      resultDiv.innerHTML = output;
     }
 
-    function scanUrls() {
-      const input = document.getElementById("urlInput").value;
-      const urls = input.split(';').map(u => u.trim()).filter(Boolean);
-      scanAll(urls, document.getElementById("urlResult"));
-    }
-
-    function scanEmailText() {
+    async function scanEmailText() {
       const input = document.getElementById("emailInput").value;
       const urls = input.match(/https?:\/\/[\w.-]+(?:\.[\w.-]+)+(?:[\/\w?=&#%.-]*)/g) || [];
-      scanAll(urls, document.getElementById("emailResult"));
+      const resultDiv = document.getElementById("emailResult");
+      resultDiv.innerHTML = urls.length ? "<div class='loading'>Scanning...</div>" : "No URLs found.";
+      let output = "";
+      for (const url of urls) {
+        try {
+          const domain = new URL(url).hostname;
+          const vtData = await scanWithProxy(url);
+          const ipData = await scanWithAbuseIPDB(domain);
+          output += buildVirusTotalSection(url, vtData);
+          output += buildAbuseIPDBSection(domain, ipData);
+        } catch (err) {
+          output += `<div class="malicious">Error scanning ${url}: ${err.message}</div>`;
+        }
+      }
+      resultDiv.innerHTML = output;
     }
   </script>
 </body>
